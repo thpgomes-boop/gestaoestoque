@@ -8,6 +8,11 @@ function hojeLocal() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+function num(v, padrao) {
+  const n = Number(v);
+  return (v === '' || v === null || v === undefined || isNaN(n)) ? padrao : n;
+}
+
 let state = {
   itens: [],
   historicoPrecos: [],
@@ -53,7 +58,7 @@ function carregarCacheLocal() {
     state.historicoPrecos = parsed.historicoPrecos || [];
     state.categorias = parsed.categorias || [];
     state.mercados = parsed.mercados || [];
-    state.estimativa_mensal = parsed.estimativa_mensal || 0;
+    state.estimativa_mensal = num(parsed.estimativa_mensal, 0);
   }
   const listaSalva = localStorage.getItem(LISTA_LOCAL_KEY);
   if (listaSalva) state.listaAtiva = JSON.parse(listaSalva);
@@ -76,7 +81,7 @@ function salvarListaLocal() {
 
 // ======================== MÁSCARA DE PREÇO (APP DE BANCO) ========================
 function formatarCentavosParaTexto(valorNumerico) {
-  return Number(valorNumerico || 0).toLocaleString('pt-BR', {
+  return num(valorNumerico, 0).toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
@@ -100,7 +105,7 @@ function aplicarMascaraBanco(inputEl, onChangeCallback = null) {
 function criarWheelPicker(hostId, keyName, valorInicial = 0, maxVal = 50, minVal = 0) {
   const host = document.getElementById(hostId);
   const itemHeight = 38;
-  const valInicial = Math.max(minVal, Math.min(maxVal, Number(valorInicial || 0)));
+  const valInicial = Math.max(minVal, Math.min(maxVal, num(valorInicial, 0)));
   wheelValues[keyName] = valInicial;
 
   let itensHtml = '';
@@ -153,7 +158,7 @@ async function sincronizarComNuvem() {
     state.historicoPrecos = json.historicoPrecos || [];
     state.categorias = json.categorias || [];
     state.mercados = json.mercados || [];
-    state.estimativa_mensal = Number(json.estimativa_mensal || 0);
+    state.estimativa_mensal = num(json.estimativa_mensal, 0);
 
     const abertas = (json.listas || []).filter(l => l.status === 'ABERTA');
     if (abertas.length > 0 && state.listaAtiva.itens.length === 0) {
@@ -163,10 +168,10 @@ async function sincronizarComNuvem() {
         itens: abertas.map(l => ({
           item_id: l.item_id,
           nome_avulso: l.nome_avulso,
-          qtd_planejada: Number(l.qtd_planejada || 1),
-          qtd_comprada: Number(l.qtd_comprada || l.qtd_planejada || 1),
-          preco_estimado: Number(l.preco_estimado || 0),
-          preco_real: Number(l.preco_real || l.preco_estimado || 0),
+          qtd_planejada: num(l.qtd_planejada, 1),
+          qtd_comprada: num(l.qtd_comprada, num(l.qtd_planejada, 1)),
+          preco_estimado: num(l.preco_estimado, 0),
+          preco_real: num(l.preco_real, num(l.preco_estimado, 0)),
           no_carrinho: l.no_carrinho === 'SIM',
           marca: ''
         }))
@@ -306,10 +311,10 @@ function renderDespensa() {
   }
 
   grid.innerHTML = filtrados.map(it => {
-    const atual = Number(it.estoque_atual || 0);
-    const min = Number(it.estoque_min || 0);
+    const atual = num(it.estoque_atual, 0);
+    const min = num(it.estoque_min, 0);
     const classe = atual < min ? 'alerta-baixo' : (atual === min ? 'alerta-medio' : 'alerta-ok');
-    const autonomia = Number(it.autonomia_dias || 0);
+    const autonomia = num(it.autonomia_dias, 0);
     const validadeBadge = getBadgeValidade(it.validade_proxima);
 
     return `
@@ -320,7 +325,7 @@ function renderDespensa() {
             <div class="card-meta">${it.categoria} • ${it.unidade_uso} ${it.ultima_marca ? '• ' + it.ultima_marca : ''}</div>
             <div class="badges">
               <span class="badge">Mín: ${min} / Alvo: ${it.estoque_max}</span>
-              ${Number(it.ultimo_preco) > 0 ? `<span class="badge">R$ ${formatarCentavosParaTexto(it.ultimo_preco)}</span>` : ''}
+              ${num(it.ultimo_preco, 0) > 0 ? `<span class="badge">R$ ${formatarCentavosParaTexto(it.ultimo_preco)}</span>` : ''}
               ${autonomia > 0 ? `<span class="badge">~${autonomia} dias</span>` : ''}
               ${validadeBadge}
             </div>
@@ -350,7 +355,7 @@ window.movimentar = async (itemId, tipo) => {
   const item = state.itens.find(i => i.id === itemId);
   if (!item) return;
 
-  item.estoque_atual = tipo === 'BAIXA' ? Math.max(0, Number(item.estoque_atual) - 1) : Number(item.estoque_atual) + 1;
+  item.estoque_atual = tipo === 'BAIXA' ? Math.max(0, num(item.estoque_atual, 0) - 1) : num(item.estoque_atual, 0) + 1;
   salvarCacheLocal();
   renderDespensa();
 
@@ -383,10 +388,10 @@ window.abrirModalItem = (id = null) => {
 
   document.getElementById('modalItem').showModal();
 
-  criarWheelPicker('wheelAtual', 'atual', item ? item.estoque_atual : 0, 60, 0);
-  criarWheelPicker('wheelMin', 'min', item ? item.estoque_min : 1, 30, 0);
-  criarWheelPicker('wheelMax', 'max', item ? item.estoque_max : 4, 60, 1);
-  criarWheelPicker('wheelFardo', 'fardo', item ? item.qtd_fardo : 1, 30, 1);
+  criarWheelPicker('wheelAtual', 'atual', item ? num(item.estoque_atual, 0) : 0, 60, 0);
+  criarWheelPicker('wheelMin', 'min', item ? num(item.estoque_min, 1) : 1, 30, 0);
+  criarWheelPicker('wheelMax', 'max', item ? num(item.estoque_max, 4) : 4, 60, 1);
+  criarWheelPicker('wheelFardo', 'fardo', item ? num(item.qtd_fardo, 1) : 1, 30, 1);
 };
 
 async function salvarFormItem(e) {
@@ -417,9 +422,9 @@ async function salvarFormItem(e) {
 // ======================== LISTA & MODO MERCADO ========================
 function gerarListaAutomatica(modo) {
   const selecionados = state.itens.filter(it => {
-    const atual = Number(it.estoque_atual || 0);
-    const min = Number(it.estoque_min || 0);
-    const autonomia = Number(it.autonomia_dias || 0);
+    const atual = num(it.estoque_atual, 0);
+    const min = num(it.estoque_min, 0);
+    const autonomia = num(it.autonomia_dias, 0);
     if (modo === 'semana') return atual < min || (autonomia > 0 && autonomia <= 7);
     return atual < min;
   });
@@ -434,14 +439,14 @@ function gerarListaAutomatica(modo) {
 
   selecionados.forEach(it => {
     if (!state.listaAtiva.itens.some(x => x.item_id === it.id)) {
-      const qtd = Math.max(1, Number(it.estoque_max || 2) - Number(it.estoque_atual || 0));
+      const qtd = Math.max(1, num(it.estoque_max, 2) - num(it.estoque_atual, 0));
       state.listaAtiva.itens.push({
         item_id: it.id,
         nome_avulso: '',
         qtd_planejada: qtd,
         qtd_comprada: qtd,
-        preco_estimado: Number(it.ultimo_preco || 0),
-        preco_real: Number(it.ultimo_preco || 0),
+        preco_estimado: num(it.ultimo_preco, 0),
+        preco_real: num(it.ultimo_preco, 0),
         no_carrinho: false,
         marca: it.ultima_marca || ''
       });
@@ -662,7 +667,7 @@ window.abrirHistorico = (itemId) => {
     chartBox.innerHTML = '<p class="hint" style="text-align:center;padding:30px 0;">Sem histórico de compras ainda.</p>';
     ul.innerHTML = '';
   } else {
-    const precos = hist.map(h => Number(h.preco_unitario));
+    const precos = hist.map(h => num(h.preco_unitario, 0));
     const min = Math.min(...precos) * 0.95;
     const max = Math.max(...precos) * 1.05 || 1;
     const w = 300, h = 90;
@@ -685,7 +690,7 @@ window.abrirHistorico = (itemId) => {
     ul.innerHTML = [...hist].reverse().map(h => `
       <li>
         <span>${h.data_iso} ${h.local_mercado ? '• ' + h.local_mercado : ''} ${h.marca ? '(' + h.marca + ')' : ''}</span>
-        <strong>${formatarBRL(Number(h.preco_unitario))}</strong>
+        <strong>${formatarBRL(num(h.preco_unitario, 0))}</strong>
       </li>
     `).join('');
   }
@@ -738,8 +743,8 @@ window.calcularPapel = () => {
   [1, 2, 3].forEach(n => {
     document.getElementById('papelCard' + n).classList.remove('vencedor');
     const preco = parseTextoMoeda(document.getElementById('pPreco' + n).value);
-    const rolos = Number(document.getElementById('pRolos' + n).value);
-    const metros = Number(document.getElementById('pMetros' + n).value);
+    const rolos = num(document.getElementById('pRolos' + n).value, 0);
+    const metros = num(document.getElementById('pMetros' + n).value, 0);
     const resEl = document.getElementById('pRes' + n);
 
     if (preco > 0 && rolos > 0 && metros > 0) {
@@ -761,5 +766,5 @@ window.calcularPapel = () => {
 };
 
 function formatarBRL(v) {
-  return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return num(v, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
