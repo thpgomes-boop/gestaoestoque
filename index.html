@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Estoque Doméstico</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Estoque de Casa</h1>
+      <small id="statusSync">Sincronizado</small>
+    </div>
+    <div class="topbar-actions">
+      <select id="selectUsuario" title="Quem está usando">
+        <option value="Thiago">Thiago</option>
+        <option value="Bárbara">Bárbara</option>
+      </select>
+      <button id="btnSincronizar" class="btn-icon" title="Atualizar dados">↻</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="despensa">📦 Despensa</button>
+    <button class="tab" data-tab="lista">📝 Lista</button>
+    <button class="tab" data-tab="mercado">🛒 Mercado</button>
+  </nav>
+
+  <main>
+    <!-- ABA 1: DESPENSA -->
+    <section id="tab-despensa" class="tab-content active">
+      <div class="toolbar">
+        <input type="search" id="buscaItem" placeholder="Buscar item..." />
+        <button id="btnNovoItem" class="btn-primary">+ Item</button>
+      </div>
+
+      <div class="cat-bar">
+        <div id="listaCategorias" class="chips"></div>
+        <button id="btnNovaCategoria" class="chip chip-add">+ Categoria</button>
+      </div>
+
+      <div id="gridDespensa" class="card-list"></div>
+    </section>
+
+    <!-- ABA 2: LISTA DE COMPRAS -->
+    <section id="tab-lista" class="tab-content">
+      <div class="summary-bar">
+        <div>
+          <span>Estimativa da Lista</span>
+          <strong id="totalEstimadoLista">R$ 0,00</strong>
+        </div>
+        <div>
+          <span>Previsão do Mês</span>
+          <strong id="estimativaMensal">R$ 0,00</strong>
+        </div>
+      </div>
+
+      <div class="toolbar wrap">
+        <button id="btnGerarMinimo" class="btn-secondary">⚡ Recompletar (Mín/Máx)</button>
+        <button id="btnGerarSemana" class="btn-secondary">📅 Próx. Semana (≤7d)</button>
+        <button id="btnSalvarLista" class="btn-primary">💾 Salvar na Nuvem</button>
+      </div>
+
+      <div class="avulso-box">
+        <input type="text" id="inputAvulsoNome" placeholder="Item avulso (não previsto)..." />
+        <input type="number" id="inputAvulsoQtd" value="1" min="1" style="width: 64px;" />
+        <button id="btnAddAvulso" class="btn-secondary">+</button>
+      </div>
+
+      <div id="listaComprasContainer" class="card-list"></div>
+    </section>
+
+    <!-- ABA 3: MODO MERCADO (OFFLINE-FIRST) -->
+    <section id="tab-mercado" class="tab-content">
+      <div class="summary-bar market-bar">
+        <div>
+          <span>No Carrinho</span>
+          <strong id="totalCarrinho">R$ 0,00</strong>
+        </div>
+        <div>
+          <span>Estimado</span>
+          <strong id="totalEstimadoMercado">R$ 0,00</strong>
+        </div>
+        <button id="btnCalcPapel" class="btn-secondary" title="Calculadora de Papel Higiênico">🧻 R$/m</button>
+      </div>
+
+      <div class="toolbar">
+        <input type="text" id="inputLocalMercado" placeholder="Nome do mercado / atacarejo..." />
+        <button id="btnFinalizarCompra" class="btn-success">✓ Finalizar</button>
+      </div>
+
+      <div class="avulso-box">
+        <input type="text" id="inputMercadoAvulso" placeholder="Adicionar item extra no corredor..." />
+        <button id="btnAddMercadoAvulso" class="btn-secondary">+</button>
+      </div>
+
+      <div id="mercadoContainer" class="card-list"></div>
+    </section>
+  </main>
+
+  <!-- MODAL: CADASTRO / EDIÇÃO DE ITEM -->
+  <dialog id="modalItem">
+    <form id="formItem" method="dialog">
+      <h2 id="modalItemTitulo">Novo Item</h2>
+      <input type="hidden" id="itemId" />
+
+      <label>Nome do Item
+        <input type="text" id="itemNome" required placeholder="Ex: Arroz Tipo 1" />
+      </label>
+
+      <div class="row-2">
+        <label>Categoria
+          <select id="itemCategoria"></select>
+        </label>
+        <label>Unidade de Uso
+          <input type="text" id="itemUnidade" required placeholder="Ex: Pct 5kg, Mód 400g" />
+        </label>
+      </div>
+
+      <div class="row-3">
+        <label>Atual
+          <input type="number" id="itemAtual" value="0" min="0" step="1" required />
+        </label>
+        <label>Mínimo
+          <input type="number" id="itemMin" value="1" min="0" step="1" required />
+        </label>
+        <label>Alvo (Máx)
+          <input type="number" id="itemMax" value="4" min="1" step="1" required />
+        </label>
+      </div>
+
+      <div class="row-2">
+        <label>Qtd por Fardo (Atacado)
+          <input type="number" id="itemFardo" value="1" min="1" step="1" />
+        </label>
+        <label>Último Preço (R$)
+          <input type="number" id="itemPreco" value="0" min="0" step="0.01" />
+        </label>
+      </div>
+
+      <div class="row-2">
+        <label>Última Marca
+          <input type="text" id="itemMarca" placeholder="Ex: Camil, Sadia" />
+        </label>
+        <label>Validade (Perecíveis)
+          <input type="date" id="itemValidade" />
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modalItem').close()">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- MODAL: HISTÓRICO / CURVA DE PREÇOS -->
+  <dialog id="modalPrecos">
+    <h2 id="tituloHistorico">Histórico de Preços</h2>
+    <div id="graficoPrecos" class="chart-box"></div>
+    <ul id="listaHistoricoPrecos" class="history-list"></ul>
+    <div class="modal-actions">
+      <button type="button" class="btn-primary" onclick="document.getElementById('modalPrecos').close()">Fechar</button>
+    </div>
+  </dialog>
+
+  <!-- MODAL: CALCULADORA DE PAPEL HIGIÊNICO -->
+  <dialog id="modalPapel">
+    <h2>🧻 Calculadora de Papel Higiênico</h2>
+    <p class="hint">Compare até 3 opções pelo custo real por metro.</p>
+    <div id="papelOpcoes"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" id="btnLimparPapel">Limpar</button>
+      <button type="button" class="btn-primary" onclick="document.getElementById('modalPapel').close()">Fechar</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
