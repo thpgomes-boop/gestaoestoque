@@ -1,4 +1,5 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwXoIcmCCQl13ynmQMvLPP56ldYDNC5sx2hgcgoVIGF1f_CnI74PI82fQAi_7yLMseNag/exec';
+const API_TOKEN = '99831900';
 const STORAGE_KEY = 'estoque_casa_cache_v1';
 const LISTA_LOCAL_KEY = 'estoque_casa_lista_ativa_v1';
 const OUTBOX_KEY = 'estoque_outbox_v1';
@@ -20,6 +21,14 @@ function autonomiaOuNull(v) {
   if (v === '' || v === null || v === undefined) return null;
   const n = Number(v);
   return isNaN(n) ? null : n;
+}
+
+function normalizarTexto(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function esc(s) {
@@ -249,7 +258,7 @@ async function sincronizarComNuvem() {
 
   setStatus('Sincronizando...');
   try {
-    const res = await fetch(API_URL);
+    const res = await fetch(`${API_URL}?token=${encodeURIComponent(API_TOKEN)}`);
     const json = await res.json();
     if (!json.ok) throw new Error(json.erro);
 
@@ -259,18 +268,14 @@ async function sincronizarComNuvem() {
     state.mercados = json.mercados || [];
     state.estimativa_mensal = num(json.estimativa_mensal, 0);
 
-    const todasListas = json.listas || [];
-
-    if (state.listaAtiva.lista_id) {
-      const linhasLocaisNaNuvem = todasListas.filter(l => String(l.lista_id) === String(state.listaAtiva.lista_id));
-      if (linhasLocaisNaNuvem.length > 0 && linhasLocaisNaNuvem.every(l => l.status === 'FINALIZADA')) {
-        state.listaAtiva = { lista_id: '', data_prevista: hojeLocal(), itens: [] };
-        salvarListaLocal();
-        alert('A lista de compras que estava aberta neste aparelho já foi finalizada em outro dispositivo e foi limpa.');
-      }
+    const finalizadasIds = (json.listasFinalizadasIds || []).map(String);
+    if (state.listaAtiva.lista_id && finalizadasIds.includes(String(state.listaAtiva.lista_id))) {
+      state.listaAtiva = { lista_id: '', data_prevista: hojeLocal(), itens: [] };
+      salvarListaLocal();
+      alert('A lista de compras que estava aberta neste aparelho já foi finalizada em outro dispositivo e foi limpa.');
     }
 
-    const todasAbertas = todasListas.filter(l => l.status === 'ABERTA');
+    const todasAbertas = (json.listas || []).filter(l => l.status === 'ABERTA');
     if (todasAbertas.length > 0) {
       const idMaisRecente = todasAbertas[todasAbertas.length - 1].lista_id;
       const abertasRecente = todasAbertas.filter(l => String(l.lista_id) === String(idMaisRecente));
@@ -311,10 +316,11 @@ async function sincronizarComNuvem() {
 
 async function postGAS(payload) {
   setStatus('Salvando...');
+  const corpo = Object.assign({}, payload, { token: API_TOKEN });
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(corpo)
   });
   const json = await res.json();
   if (!json.ok) {
@@ -575,6 +581,19 @@ async function salvarFormItem(e) {
     ultima_marca: document.getElementById('itemMarca').value.trim(),
     validade_proxima: document.getElementById('itemValidade').value || ''
   };
+
+  // Alerta de item duplicado ao criar item novo (nome + unidade sem acento/maiúsculas)
+  if (!payloadItem.id) {
+    const chaveNova = normalizarTexto(payloadItem.nome) + '|' + normalizarTexto(payloadItem.unidade_uso);
+    const jaExiste = state.itens.some(it =>
+      (normalizarTexto(it.nome) + '|' + normalizarTexto(it.unidade_uso)) === chaveNova
+    );
+    if (jaExiste) {
+      if (!confirm(`Já existe um item "${payloadItem.nome} (${payloadItem.unidade_uso})" na despensa. Deseja cadastrar mesmo assim?`)) {
+        return;
+      }
+    }
+  }
 
   document.getElementById('modalItem').close();
   try {
