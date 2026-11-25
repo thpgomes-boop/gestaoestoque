@@ -13,6 +13,13 @@ function num(v, padrao) {
   return (v === '' || v === null || v === undefined || isNaN(n)) ? padrao : n;
 }
 
+function gerarUuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
 let state = {
   itens: [],
   historicoPrecos: [],
@@ -434,7 +441,7 @@ function gerarListaAutomatica(modo) {
     return;
   }
 
-  state.listaAtiva.lista_id = state.listaAtiva.lista_id || ('LST_' + Date.now());
+  state.listaAtiva.lista_id = state.listaAtiva.lista_id || ('LST_' + gerarUuid());
   state.listaAtiva.data_prevista = hojeLocal();
 
   selecionados.forEach(it => {
@@ -459,7 +466,7 @@ function gerarListaAutomatica(modo) {
 }
 
 function adicionarAvulso(nome, qtd) {
-  state.listaAtiva.lista_id = state.listaAtiva.lista_id || ('LST_' + Date.now());
+  state.listaAtiva.lista_id = state.listaAtiva.lista_id || ('LST_' + gerarUuid());
   state.listaAtiva.itens.push({
     item_id: '',
     nome_avulso: nome,
@@ -531,7 +538,7 @@ async function salvarListaNaNuvem() {
   try {
     const res = await postGAS({
       action: 'salvarLista',
-      lista_id: state.listaAtiva.lista_id || ('LST_' + Date.now()),
+      lista_id: state.listaAtiva.lista_id || ('LST_' + gerarUuid()),
       data_prevista: state.listaAtiva.data_prevista,
       itensLista: state.listaAtiva.itens
     });
@@ -638,7 +645,7 @@ async function finalizarCompraMercado() {
   try {
     await postGAS({
       action: 'finalizarCompra',
-      lista_id: state.listaAtiva.lista_id || ('LST_' + Date.now()),
+      lista_id: state.listaAtiva.lista_id || ('LST_' + gerarUuid()),
       local_mercado: local,
       usuario: getUsuario(),
       itensComprados: comprados
