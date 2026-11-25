@@ -13,6 +13,16 @@ function num(v, padrao) {
   return (v === '' || v === null || v === undefined || isNaN(n)) ? padrao : n;
 }
 
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
+}
+
 function gerarUuid() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -211,7 +221,7 @@ function setStatus(txt) {
   document.getElementById('statusSync').textContent = txt;
 }
 
-// ======================== EVENTOS ========================
+// ======================== EVENTOS (COM DELEGAÇÃO SEGURA) ========================
 function bindEventos() {
   document.querySelectorAll('.tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -225,6 +235,48 @@ function bindEventos() {
   document.getElementById('buscaItem').addEventListener('input', renderDespensa);
   document.getElementById('btnNovoItem').addEventListener('click', () => abrirModalItem());
   document.getElementById('formItem').addEventListener('submit', salvarFormItem);
+
+  // Delegação: Categorias
+  document.getElementById('listaCategorias').addEventListener('click', e => {
+    const btn = e.target.closest('[data-cat]');
+    if (btn) filtrarCategoria(btn.dataset.cat);
+  });
+
+  // Delegação: Despensa
+  document.getElementById('gridDespensa').addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const action = el.dataset.action;
+    const id = el.dataset.id;
+    if (action === 'editar') abrirModalItem(id);
+    else if (action === 'historico') abrirHistorico(id);
+    else if (action === 'mov') movimentar(id, el.dataset.tipo);
+  });
+
+  // Delegação: Lista de Compras
+  document.getElementById('listaComprasContainer').addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const idx = Number(el.dataset.idx);
+    if (el.dataset.action === 'qtd-lista') alterarQtdLista(idx, Number(el.dataset.delta));
+    else if (el.dataset.action === 'rem-lista') removerDaLista(idx);
+  });
+
+  // Delegação: Modo Mercado (cliques e alterações)
+  const mercadoEl = document.getElementById('mercadoContainer');
+  mercadoEl.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    if (el.dataset.action === 'historico') abrirHistorico(el.dataset.id);
+    else if (el.dataset.action === 'qtd-mercado') updQtdMercado(Number(el.dataset.idx), Number(el.dataset.delta));
+  });
+  mercadoEl.addEventListener('change', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const idx = Number(el.dataset.idx);
+    if (el.dataset.action === 'toggle-carrinho') toggleCarrinho(idx, el.checked);
+    else if (el.dataset.action === 'marca-mercado') updMercado(idx, 'marca', el.value);
+  });
 
   document.getElementById('btnNovaCategoria').addEventListener('click', async () => {
     const nova = prompt('Nome da nova categoria:');
@@ -284,7 +336,7 @@ function renderCategorias() {
   const container = document.getElementById('listaCategorias');
   const todas = ['Todas', ...state.categorias];
   container.innerHTML = todas.map(cat => `
-    <button class="chip ${state.categoriaAtiva === cat ? 'active' : ''}" onclick="filtrarCategoria('${cat}')">${cat}</button>
+    <button class="chip ${state.categoriaAtiva === cat ? 'active' : ''}" data-cat="${esc(cat)}">${esc(cat)}</button>
   `).join('');
 }
 
@@ -292,16 +344,16 @@ function renderMercadosSelect(selecionar = '') {
   const sel = document.getElementById('selectLocalMercado');
   const atual = selecionar || sel.value;
   const opcoes = ['<option value="">Selecione o mercado...</option>']
-    .concat(state.mercados.map(m => `<option value="${m}">${m}</option>`));
+    .concat(state.mercados.map(m => `<option value="${esc(m)}">${esc(m)}</option>`));
   sel.innerHTML = opcoes.join('');
   if (atual && state.mercados.includes(atual)) sel.value = atual;
 }
 
-window.filtrarCategoria = (cat) => {
+function filtrarCategoria(cat) {
   state.categoriaAtiva = cat;
   renderCategorias();
   renderDespensa();
-};
+}
 
 function renderDespensa() {
   const busca = document.getElementById('buscaItem').value.toLowerCase();
@@ -327,21 +379,21 @@ function renderDespensa() {
     return `
       <div class="card ${classe}">
         <div class="card-top">
-          <div onclick="abrirModalItem('${it.id}')" style="cursor:pointer;flex:1;">
-            <div class="card-title">${it.nome}</div>
-            <div class="card-meta">${it.categoria} • ${it.unidade_uso} ${it.ultima_marca ? '• ' + it.ultima_marca : ''}</div>
+          <div data-action="editar" data-id="${esc(it.id)}" style="cursor:pointer;flex:1;">
+            <div class="card-title">${esc(it.nome)}</div>
+            <div class="card-meta">${esc(it.categoria)} • ${esc(it.unidade_uso)} ${it.ultima_marca ? '• ' + esc(it.ultima_marca) : ''}</div>
             <div class="badges">
-              <span class="badge">Mín: ${min} / Alvo: ${it.estoque_max}</span>
+              <span class="badge">Mín: ${min} / Alvo: ${num(it.estoque_max, 0)}</span>
               ${num(it.ultimo_preco, 0) > 0 ? `<span class="badge">R$ ${formatarCentavosParaTexto(it.ultimo_preco)}</span>` : ''}
               ${autonomia > 0 ? `<span class="badge">~${autonomia} dias</span>` : ''}
               ${validadeBadge}
             </div>
           </div>
           <div class="card-controls">
-            <button class="btn-secondary btn-step" onclick="abrirHistorico('${it.id}')" title="Histórico de Preços">📈</button>
-            <button class="btn-danger btn-step" onclick="movimentar('${it.id}', 'BAIXA')" title="Dar baixa (-1)">−</button>
+            <button class="btn-secondary btn-step" data-action="historico" data-id="${esc(it.id)}" title="Histórico de Preços">📈</button>
+            <button class="btn-danger btn-step" data-action="mov" data-id="${esc(it.id)}" data-tipo="BAIXA" title="Dar baixa (-1)">−</button>
             <span class="qtd-pill">${atual}</span>
-            <button class="btn-success btn-step" onclick="movimentar('${it.id}', 'ENTRADA')" title="Entrada (+1)">+</button>
+            <button class="btn-success btn-step" data-action="mov" data-id="${esc(it.id)}" data-tipo="ENTRADA" title="Entrada (+1)">+</button>
           </div>
         </div>
       </div>
@@ -352,13 +404,14 @@ function renderDespensa() {
 function getBadgeValidade(dataIso) {
   if (!dataIso) return '';
   const diff = Math.ceil((new Date(dataIso) - new Date()) / (1000 * 60 * 60 * 24));
+  const txtData = esc(String(dataIso).slice(5));
   if (diff <= 3) return `<span class="badge badge-danger">Vence em ${diff}d</span>`;
-  if (diff <= 10) return `<span class="badge badge-warn">Val: ${dataIso.slice(5)}</span>`;
-  return `<span class="badge">Val: ${dataIso.slice(5)}</span>`;
+  if (diff <= 10) return `<span class="badge badge-warn">Val: ${txtData}</span>`;
+  return `<span class="badge">Val: ${txtData}</span>`;
 }
 
 // ======================== AÇÕES DESPENSA ========================
-window.movimentar = async (itemId, tipo) => {
+async function movimentar(itemId, tipo) {
   const item = state.itens.find(i => i.id === itemId);
   if (!item) return;
 
@@ -377,11 +430,11 @@ window.movimentar = async (itemId, tipo) => {
   } catch (e) {
     alert('Falha ao sincronizar movimentação: ' + e.message);
   }
-};
+}
 
-window.abrirModalItem = (id = null) => {
+function abrirModalItem(id = null) {
   const selectCat = document.getElementById('itemCategoria');
-  selectCat.innerHTML = state.categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+  selectCat.innerHTML = state.categorias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
 
   const item = id ? state.itens.find(i => i.id === id) : null;
   document.getElementById('modalItemTitulo').textContent = item ? 'Editar Item' : 'Novo Item';
@@ -399,7 +452,7 @@ window.abrirModalItem = (id = null) => {
   criarWheelPicker('wheelMin', 'min', item ? num(item.estoque_min, 1) : 1, 30, 0);
   criarWheelPicker('wheelMax', 'max', item ? num(item.estoque_max, 4) : 4, 60, 1);
   criarWheelPicker('wheelFardo', 'fardo', item ? num(item.qtd_fardo, 1) : 1, 30, 1);
-};
+}
 
 async function salvarFormItem(e) {
   e.preventDefault();
@@ -499,14 +552,14 @@ function renderListaCompras() {
         <div class="card">
           <div class="card-top">
             <div>
-              <div class="card-title">${nome}</div>
+              <div class="card-title">${esc(nome)}</div>
               <div class="card-meta">Est.: R$ ${formatarCentavosParaTexto(entry.preco_estimado)} • Sub: R$ ${formatarCentavosParaTexto(sub)}</div>
             </div>
             <div class="card-controls">
-              <button class="btn-secondary btn-step" onclick="alterarQtdLista(${idx}, -1)">−</button>
+              <button class="btn-secondary btn-step" data-action="qtd-lista" data-idx="${idx}" data-delta="-1">−</button>
               <span class="qtd-pill">${entry.qtd_planejada}</span>
-              <button class="btn-secondary btn-step" onclick="alterarQtdLista(${idx}, 1)">+</button>
-              <button class="btn-danger btn-step" onclick="removerDaLista(${idx})">×</button>
+              <button class="btn-secondary btn-step" data-action="qtd-lista" data-idx="${idx}" data-delta="1">+</button>
+              <button class="btn-danger btn-step" data-action="rem-lista" data-idx="${idx}">×</button>
             </div>
           </div>
         </div>
@@ -518,21 +571,21 @@ function renderListaCompras() {
   document.getElementById('estimativaMensal').textContent = formatarBRL(state.estimativa_mensal);
 }
 
-window.alterarQtdLista = (idx, delta) => {
+function alterarQtdLista(idx, delta) {
   const it = state.listaAtiva.itens[idx];
   it.qtd_planejada = Math.max(1, it.qtd_planejada + delta);
   it.qtd_comprada = it.qtd_planejada;
   salvarListaLocal();
   renderListaCompras();
   renderModoMercado();
-};
+}
 
-window.removerDaLista = (idx) => {
+function removerDaLista(idx) {
   state.listaAtiva.itens.splice(idx, 1);
   salvarListaLocal();
   renderListaCompras();
   renderModoMercado();
-};
+}
 
 async function salvarListaNaNuvem() {
   try {
@@ -571,25 +624,25 @@ function renderModoMercado() {
         <div class="card ${entry.no_carrinho ? 'no-carrinho' : ''}">
           <div class="card-top">
             <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;">
-              <input type="checkbox" ${entry.no_carrinho ? 'checked' : ''} onchange="toggleCarrinho(${idx}, this.checked)" style="width:22px;height:22px;" />
+              <input type="checkbox" data-action="toggle-carrinho" data-idx="${idx}" ${entry.no_carrinho ? 'checked' : ''} style="width:22px;height:22px;" />
               <div>
-                <div class="card-title">${nome}</div>
+                <div class="card-title">${esc(nome)}</div>
                 <div class="card-meta">Último: R$ ${formatarCentavosParaTexto(entry.preco_estimado)}</div>
               </div>
             </label>
-            ${entry.item_id ? `<button class="btn-secondary btn-step" onclick="abrirHistorico('${entry.item_id}')">📈</button>` : ''}
+            ${entry.item_id ? `<button class="btn-secondary btn-step" data-action="historico" data-id="${esc(entry.item_id)}">📈</button>` : ''}
           </div>
           <div class="market-inputs">
             <div class="market-row">
-              <button class="btn-secondary btn-step" onclick="updQtdMercado(${idx}, -1)">−</button>
+              <button class="btn-secondary btn-step" data-action="qtd-mercado" data-idx="${idx}" data-delta="-1">−</button>
               <span class="qtd-pill">${entry.qtd_comprada}</span>
-              <button class="btn-secondary btn-step" onclick="updQtdMercado(${idx}, 1)">+</button>
+              <button class="btn-secondary btn-step" data-action="qtd-mercado" data-idx="${idx}" data-delta="1">+</button>
               <div class="money-wrap" style="flex:1;">
                 <span>R$</span>
                 <input type="text" inputmode="numeric" id="mPreco${idx}" value="${formatarCentavosParaTexto(entry.preco_real)}" />
               </div>
             </div>
-            <input type="text" value="${entry.marca || ''}" onchange="updMercado(${idx}, 'marca', this.value)" placeholder="Marca comprada..." />
+            <input type="text" data-action="marca-mercado" data-idx="${idx}" value="${esc(entry.marca || '')}" placeholder="Marca comprada..." />
           </div>
         </div>
       `;
@@ -616,22 +669,22 @@ function atualizarTotaisMercado() {
   document.getElementById('totalCarrinho').textContent = formatarBRL(totalCar);
 }
 
-window.toggleCarrinho = (idx, checked) => {
+function toggleCarrinho(idx, checked) {
   state.listaAtiva.itens[idx].no_carrinho = checked;
   salvarListaLocal();
   renderModoMercado();
-};
+}
 
-window.updQtdMercado = (idx, delta) => {
+function updQtdMercado(idx, delta) {
   state.listaAtiva.itens[idx].qtd_comprada = Math.max(1, state.listaAtiva.itens[idx].qtd_comprada + delta);
   salvarListaLocal();
   renderModoMercado();
-};
+}
 
-window.updMercado = (idx, campo, valor) => {
+function updMercado(idx, campo, valor) {
   state.listaAtiva.itens[idx][campo] = valor;
   salvarListaLocal();
-};
+}
 
 async function finalizarCompraMercado() {
   const comprados = state.listaAtiva.itens.filter(i => i.no_carrinho);
@@ -660,7 +713,7 @@ async function finalizarCompraMercado() {
 }
 
 // ======================== CURVA DE PREÇOS (SVG PURO) ========================
-window.abrirHistorico = (itemId) => {
+function abrirHistorico(itemId) {
   const item = state.itens.find(i => i.id === itemId);
   const hist = state.historicoPrecos
     .filter(h => String(h.item_id) === String(itemId))
@@ -696,14 +749,14 @@ window.abrirHistorico = (itemId) => {
 
     ul.innerHTML = [...hist].reverse().map(h => `
       <li>
-        <span>${h.data_iso} ${h.local_mercado ? '• ' + h.local_mercado : ''} ${h.marca ? '(' + h.marca + ')' : ''}</span>
+        <span>${esc(h.data_iso)} ${h.local_mercado ? '• ' + esc(h.local_mercado) : ''} ${h.marca ? '(' + esc(h.marca) + ')' : ''}</span>
         <strong>${formatarBRL(num(h.preco_unitario, 0))}</strong>
       </li>
     `).join('');
   }
 
   document.getElementById('modalPrecos').showModal();
-};
+}
 
 // ======================== CALCULADORA DE PAPEL HIGIÊNICO ========================
 function abrirCalculadoraPapel() {
