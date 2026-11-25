@@ -2,6 +2,12 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwXoIcmCCQl13ynmQMvLPP5
 const STORAGE_KEY = 'estoque_casa_cache_v1';
 const LISTA_LOCAL_KEY = 'estoque_casa_lista_ativa_v1';
 
+function hojeLocal() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 let state = {
   itens: [],
   historicoPrecos: [],
@@ -11,7 +17,7 @@ let state = {
   categoriaAtiva: 'Todas',
   listaAtiva: {
     lista_id: '',
-    data_prevista: new Date().toISOString().slice(0, 10),
+    data_prevista: hojeLocal(),
     itens: []
   }
 };
@@ -424,7 +430,7 @@ function gerarListaAutomatica(modo) {
   }
 
   state.listaAtiva.lista_id = state.listaAtiva.lista_id || ('LST_' + Date.now());
-  state.listaAtiva.data_prevista = new Date().toISOString().slice(0, 10);
+  state.listaAtiva.data_prevista = hojeLocal();
 
   selecionados.forEach(it => {
     if (!state.listaAtiva.itens.some(x => x.item_id === it.id)) {
@@ -632,7 +638,7 @@ async function finalizarCompraMercado() {
       usuario: getUsuario(),
       itensComprados: comprados
     });
-    state.listaAtiva = { lista_id: '', data_prevista: new Date().toISOString().slice(0, 10), itens: [] };
+    state.listaAtiva = { lista_id: '', data_prevista: hojeLocal(), itens: [] };
     salvarListaLocal();
     await sincronizarComNuvem();
     alert('Compra finalizada! Estoque e histórico de preços atualizados.');
