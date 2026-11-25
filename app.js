@@ -1,6 +1,9 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwXoIcmCCQl13ynmQMvLPP56ldYDNC5sx2hgcgoVIGF1f_CnI74PI82fQAi_7yLMseNag/exec';
 const STORAGE_KEY = 'estoque_casa_cache_v1';
 const LISTA_LOCAL_KEY = 'estoque_casa_lista_ativa_v1';
+const OUTBOX_KEY = 'estoque_outbox_v1';
+
+let descarregando = false;
 
 function hojeLocal() {
   const d = new Date();
@@ -53,6 +56,11 @@ document.addEventListener('DOMContentLoaded', () => {
   carregarCacheLocal();
   bindEventos();
   aplicarMascaraBanco(document.getElementById('itemPreco'));
+  window.addEventListener('online', () => {
+    descarregarFila().then(() => {
+      if (lerOutbox().length === 0) sincronizarComNuvem();
+    });
+  });
   sincronizarComNuvem();
 });
 
@@ -94,6 +102,69 @@ function salvarCacheLocal() {
 
 function salvarListaLocal() {
   localStorage.setItem(LISTA_LOCAL_KEY, JSON.stringify(state.listaAtiva));
+}
+
+// ======================== FILA OFFLINE (OUTBOX) ========================
+function lerOutbox() {
+  try {
+    return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function salvarOutbox(fila) {
+  localStorage.setItem(OUTBOX_KEY, JSON.stringify(fila));
+}
+
+function enfileirar(op) {
+  op.op_id = op.op_id || gerarUuid();
+  const fila = lerOutbox();
+  fila.push(op);
+  salvarOutbox(fila);
+  if (!navigator.onLine) {
+    setStatus(`Offline • ${fila.length} pendência(s)`);
+  }
+  descarregarFila();
+}
+
+async function descarregarFila() {
+  if (descarregando) return;
+  let fila = lerOutbox();
+  if (fila.length === 0) return;
+
+  if (!navigator.onLine) {
+    setStatus(`Offline • ${fila.length} pendência(s)`);
+    return;
+  }
+
+  descarregando = true;
+  try {
+    while (fila.length > 0) {
+      setStatus(`Enviando pendências (${fila.length})...`);
+      try {
+        await postGAS(fila[0]);
+        fila.shift();
+        salvarOutbox(fila);
+      } catch (err) {
+        if (err.isBusiness) {
+          // Erro definitivo de negócio: remove da fila para não travar as próximas
+          fila.shift();
+          salvarOutbox(fila);
+          alert('Uma movimentação pendente falhou e foi descartada: ' + err.message);
+        } else {
+          // Erro de rede ou servidor ocupado (lock): mantém na fila para tentar depois
+          setStatus(`Offline • ${fila.length} pendência(s)`);
+          break;
+        }
+      }
+    }
+    if (fila.length === 0) {
+      setStatus('Online • Atualizado');
+    }
+  } finally {
+    descarregando = false;
+  }
 }
 
 // ======================== MÁSCARA DE PREÇO (APP DE BANCO) ========================
@@ -165,6 +236,14 @@ function criarWheelPicker(hostId, keyName, valorInicial = 0, maxVal = 50, minVal
 
 // ======================== COMUNICAÇÃO GAS ========================
 async function sincronizarComNuvem() {
+  // Primeiro tenta enviar qualquer pendência offline
+  await descarregarFila();
+  const pendentes = lerOutbox();
+  if (pendentes.length > 0) {
+    setStatus(`Offline • ${pendentes.length} pendência(s)`);
+    return;
+  }
+
   setStatus('Sincronizando...');
   try {
     const res = await fetch(API_URL);
@@ -237,7 +316,13 @@ async function postGAS(payload) {
     body: JSON.stringify(payload)
   });
   const json = await res.json();
-  if (!json.ok) throw new Error(json.erro || 'Erro ao salvar');
+  if (!json.ok) {
+    const err = new Error(json.erro || 'Erro ao salvar');
+    if (!String(json.erro || '').includes('Servidor ocupado')) {
+      err.isBusiness = true;
+    }
+    throw err;
+  }
   setStatus('Salvo na nuvem');
   return json.data;
 }
@@ -436,7 +521,7 @@ function getBadgeValidade(dataIso) {
 }
 
 // ======================== AÇÕES DESPENSA ========================
-async function movimentar(itemId, tipo) {
+function movimentar(itemId, tipo) {
   const item = state.itens.find(i => i.id === itemId);
   if (!item) return;
 
@@ -444,17 +529,13 @@ async function movimentar(itemId, tipo) {
   salvarCacheLocal();
   renderDespensa();
 
-  try {
-    await postGAS({
-      action: 'registrarMovimentacao',
-      item_id: itemId,
-      tipo,
-      quantidade: 1,
-      usuario: getUsuario()
-    });
-  } catch (e) {
-    alert('Falha ao sincronizar movimentação: ' + e.message);
-  }
+  enfileirar({
+    action: 'registrarMovimentacao',
+    item_id: itemId,
+    tipo,
+    quantidade: 1,
+    usuario: getUsuario()
+  });
 }
 
 function abrirModalItem(id = null) {
