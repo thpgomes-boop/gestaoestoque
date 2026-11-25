@@ -177,12 +177,28 @@ async function sincronizarComNuvem() {
     state.mercados = json.mercados || [];
     state.estimativa_mensal = num(json.estimativa_mensal, 0);
 
-    const abertas = (json.listas || []).filter(l => l.status === 'ABERTA');
-    if (abertas.length > 0 && state.listaAtiva.itens.length === 0) {
-      state.listaAtiva = {
-        lista_id: abertas[0].lista_id,
-        data_prevista: abertas[0].data_prevista,
-        itens: abertas.map(l => ({
+    const todasListas = json.listas || [];
+
+    // 1. Se a lista local já consta como FINALIZADA na nuvem, descarta e avisa
+    if (state.listaAtiva.lista_id) {
+      const linhasLocaisNaNuvem = todasListas.filter(l => String(l.lista_id) === String(state.listaAtiva.lista_id));
+      if (linhasLocaisNaNuvem.length > 0 && linhasLocaisNaNuvem.every(l => l.status === 'FINALIZADA')) {
+        state.listaAtiva = { lista_id: '', data_prevista: hojeLocal(), itens: [] };
+        salvarListaLocal();
+        alert('A lista de compras que estava aberta neste aparelho já foi finalizada em outro dispositivo e foi limpa.');
+      }
+    }
+
+    // 2. Considera apenas a lista ABERTA mais recente da nuvem
+    const todasAbertas = todasListas.filter(l => l.status === 'ABERTA');
+    if (todasAbertas.length > 0) {
+      const idMaisRecente = todasAbertas[todasAbertas.length - 1].lista_id;
+      const abertasRecente = todasAbertas.filter(l => String(l.lista_id) === String(idMaisRecente));
+
+      const listaNuvem = {
+        lista_id: idMaisRecente,
+        data_prevista: abertasRecente[0].data_prevista || hojeLocal(),
+        itens: abertasRecente.map(l => ({
           item_id: l.item_id,
           nome_avulso: l.nome_avulso,
           qtd_planejada: num(l.qtd_planejada, 1),
@@ -193,7 +209,16 @@ async function sincronizarComNuvem() {
           marca: ''
         }))
       };
-      salvarListaLocal();
+
+      if (state.listaAtiva.itens.length === 0) {
+        state.listaAtiva = listaNuvem;
+        salvarListaLocal();
+      } else if (String(state.listaAtiva.lista_id) !== String(idMaisRecente)) {
+        if (confirm('Existe outra lista de compras aberta na nuvem. Deseja carregar a lista da nuvem? (Cancelar mantém a sua lista local)')) {
+          state.listaAtiva = listaNuvem;
+          salvarListaLocal();
+        }
+      }
     }
 
     salvarCacheLocal();
@@ -516,6 +541,7 @@ function gerarListaAutomatica(modo) {
   salvarListaLocal();
   renderListaCompras();
   renderModoMercado();
+  salvarListaSilencioso();
 }
 
 function adicionarAvulso(nome, qtd) {
@@ -533,6 +559,7 @@ function adicionarAvulso(nome, qtd) {
   salvarListaLocal();
   renderListaCompras();
   renderModoMercado();
+  salvarListaSilencioso();
 }
 
 function renderListaCompras() {
@@ -585,6 +612,25 @@ function removerDaLista(idx) {
   salvarListaLocal();
   renderListaCompras();
   renderModoMercado();
+}
+
+async function salvarListaSilencioso() {
+  if (!navigator.onLine || state.listaAtiva.itens.length === 0) return;
+  try {
+    const res = await postGAS({
+      action: 'salvarLista',
+      lista_id: state.listaAtiva.lista_id || ('LST_' + gerarUuid()),
+      data_prevista: state.listaAtiva.data_prevista,
+      itensLista: state.listaAtiva.itens
+    });
+    state.listaAtiva.lista_id = res.lista_id;
+    state.estimativa_mensal = res.estimativa_mensal;
+    salvarListaLocal();
+    salvarCacheLocal();
+    renderListaCompras();
+  } catch (e) {
+    // Silencioso se estiver offline; continua salvo no aparelho
+  }
 }
 
 async function salvarListaNaNuvem() {
