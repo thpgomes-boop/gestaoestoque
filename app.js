@@ -6,6 +6,7 @@ let state = {
   itens: [],
   historicoPrecos: [],
   categorias: [],
+  mercados: [],
   estimativa_mensal: 0,
   categoriaAtiva: 'Todas',
   listaAtiva: {
@@ -15,11 +16,15 @@ let state = {
   }
 };
 
+// Guarda os valores atuais dos seletores rotativos (estilo relógio Apple)
+const wheelValues = { atual: 0, min: 1, max: 4, fardo: 1 };
+
 // ======================== INICIALIZAÇÃO ========================
 document.addEventListener('DOMContentLoaded', () => {
   carregarUsuarioSalvo();
   carregarCacheLocal();
   bindEventos();
+  aplicarMascaraBanco(document.getElementById('itemPreco'));
   sincronizarComNuvem();
 });
 
@@ -41,12 +46,11 @@ function carregarCacheLocal() {
     state.itens = parsed.itens || [];
     state.historicoPrecos = parsed.historicoPrecos || [];
     state.categorias = parsed.categorias || [];
+    state.mercados = parsed.mercados || [];
     state.estimativa_mensal = parsed.estimativa_mensal || 0;
   }
   const listaSalva = localStorage.getItem(LISTA_LOCAL_KEY);
-  if (listaSalva) {
-    state.listaAtiva = JSON.parse(listaSalva);
-  }
+  if (listaSalva) state.listaAtiva = JSON.parse(listaSalva);
   renderTudo();
 }
 
@@ -55,12 +59,83 @@ function salvarCacheLocal() {
     itens: state.itens,
     historicoPrecos: state.historicoPrecos,
     categorias: state.categorias,
+    mercados: state.mercados,
     estimativa_mensal: state.estimativa_mensal
   }));
 }
 
 function salvarListaLocal() {
   localStorage.setItem(LISTA_LOCAL_KEY, JSON.stringify(state.listaAtiva));
+}
+
+// ======================== MÁSCARA DE PREÇO (APP DE BANCO) ========================
+function formatarCentavosParaTexto(valorNumerico) {
+  return Number(valorNumerico || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function parseTextoMoeda(texto) {
+  const digitos = String(texto || '').replace(/\D/g, '');
+  return digitos ? Number(digitos) / 100 : 0;
+}
+
+function aplicarMascaraBanco(inputEl, onChangeCallback = null) {
+  if (!inputEl) return;
+  inputEl.addEventListener('input', () => {
+    const valor = parseTextoMoeda(inputEl.value);
+    inputEl.value = formatarCentavosParaTexto(valor);
+    if (onChangeCallback) onChangeCallback(valor);
+  });
+}
+
+// ======================== SELETOR ROTATIVO (ESTILO APPLE) ========================
+function criarWheelPicker(hostId, keyName, valorInicial = 0, maxVal = 50, minVal = 0) {
+  const host = document.getElementById(hostId);
+  const itemHeight = 38;
+  const valInicial = Math.max(minVal, Math.min(maxVal, Number(valorInicial || 0)));
+  wheelValues[keyName] = valInicial;
+
+  let itensHtml = '';
+  for (let v = minVal; v <= maxVal; v++) {
+    itensHtml += `<div class="wheel-item ${v === valInicial ? 'selected' : ''}" data-val="${v}">${v}</div>`;
+  }
+
+  host.innerHTML = `
+    <div class="wheel-picker">
+      <div class="wheel-highlight"></div>
+      <div class="wheel-track">${itensHtml}</div>
+    </div>
+  `;
+
+  const track = host.querySelector('.wheel-track');
+  const items = host.querySelectorAll('.wheel-item');
+
+  // Posiciona no valor inicial
+  setTimeout(() => {
+    track.scrollTop = (valInicial - minVal) * itemHeight;
+  }, 20);
+
+  // Atualiza valor selecionado ao rolar
+  let scrollTimer;
+  track.addEventListener('scroll', () => {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      const idx = Math.round(track.scrollTop / itemHeight);
+      const novoVal = Math.max(minVal, Math.min(maxVal, minVal + idx));
+      wheelValues[keyName] = novoVal;
+      items.forEach(el => el.classList.toggle('selected', Number(el.dataset.val) === novoVal));
+    }, 40);
+  });
+
+  // Permite tocar diretamente no número para centralizar
+  items.forEach(el => {
+    el.addEventListener('click', () => {
+      const v = Number(el.dataset.val);
+      track.scrollTo({ top: (v - minVal) * itemHeight, behavior: 'smooth' });
+    });
+  });
 }
 
 // ======================== COMUNICAÇÃO GAS ========================
@@ -74,9 +149,9 @@ async function sincronizarComNuvem() {
     state.itens = json.itens || [];
     state.historicoPrecos = json.historicoPrecos || [];
     state.categorias = json.categorias || [];
+    state.mercados = json.mercados || [];
     state.estimativa_mensal = Number(json.estimativa_mensal || 0);
 
-    // Carrega lista ABERTA da nuvem se não houver alterações locais em andamento
     const abertas = (json.listas || []).filter(l => l.status === 'ABERTA');
     if (abertas.length > 0 && state.listaAtiva.itens.length === 0) {
       state.listaAtiva = {
@@ -123,7 +198,6 @@ function setStatus(txt) {
 
 // ======================== EVENTOS ========================
 function bindEventos() {
-  // Navegação de abas
   document.querySelectorAll('.tab').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab, .tab-content').forEach(el => el.classList.remove('active'));
@@ -148,15 +222,25 @@ function bindEventos() {
     } catch (e) { alert('Erro ao adicionar categoria: ' + e.message); }
   });
 
+  document.getElementById('btnNovoMercado').addEventListener('click', async () => {
+    const novo = prompt('Nome do novo mercado / atacarejo:');
+    if (!novo || !novo.trim()) return;
+    try {
+      const data = await postGAS({ action: 'adicionarMercado', mercado: novo.trim() });
+      state.mercados = data.mercados;
+      salvarCacheLocal();
+      renderMercadosSelect(novo.trim());
+    } catch (e) { alert('Erro ao adicionar mercado: ' + e.message); }
+  });
+
   document.getElementById('btnGerarMinimo').addEventListener('click', () => gerarListaAutomatica('minimo'));
   document.getElementById('btnGerarSemana').addEventListener('click', () => gerarListaAutomatica('semana'));
   document.getElementById('btnSalvarLista').addEventListener('click', salvarListaNaNuvem);
 
   document.getElementById('btnAddAvulso').addEventListener('click', () => {
     const nome = document.getElementById('inputAvulsoNome').value.trim();
-    const qtd = Number(document.getElementById('inputAvulsoQtd').value || 1);
     if (!nome) return;
-    adicionarAvulso(nome, qtd);
+    adicionarAvulso(nome, 1);
     document.getElementById('inputAvulsoNome').value = '';
   });
 
@@ -175,6 +259,7 @@ function bindEventos() {
 // ======================== RENDERIZAÇÃO ========================
 function renderTudo() {
   renderCategorias();
+  renderMercadosSelect();
   renderDespensa();
   renderListaCompras();
   renderModoMercado();
@@ -186,6 +271,15 @@ function renderCategorias() {
   container.innerHTML = todas.map(cat => `
     <button class="chip ${state.categoriaAtiva === cat ? 'active' : ''}" onclick="filtrarCategoria('${cat}')">${cat}</button>
   `).join('');
+}
+
+function renderMercadosSelect(selecionar = '') {
+  const sel = document.getElementById('selectLocalMercado');
+  const atual = selecionar || sel.value;
+  const opcoes = ['<option value="">Selecione o mercado...</option>']
+    .concat(state.mercados.map(m => `<option value="${m}">${m}</option>`));
+  sel.innerHTML = opcoes.join('');
+  if (atual && state.mercados.includes(atual)) sel.value = atual;
 }
 
 window.filtrarCategoria = (cat) => {
@@ -204,7 +298,7 @@ function renderDespensa() {
 
   const grid = document.getElementById('gridDespensa');
   if (filtrados.length === 0) {
-    grid.innerHTML = '<p class="hint" style="text-align:center;padding:20px;">Nenhum item encontrado. Clique em "+ Item" para começar.</p>';
+    grid.innerHTML = '<div class="card"><p class="hint" style="text-align:center;margin:10px 0;">Nenhum item encontrado. Clique em "+ Item" para começar!</p></div>';
     return;
   }
 
@@ -223,7 +317,7 @@ function renderDespensa() {
             <div class="card-meta">${it.categoria} • ${it.unidade_uso} ${it.ultima_marca ? '• ' + it.ultima_marca : ''}</div>
             <div class="badges">
               <span class="badge">Mín: ${min} / Alvo: ${it.estoque_max}</span>
-              ${Number(it.ultimo_preco) > 0 ? `<span class="badge">R$ ${Number(it.ultimo_preco).toFixed(2)}</span>` : ''}
+              ${Number(it.ultimo_preco) > 0 ? `<span class="badge">R$ ${formatarCentavosParaTexto(it.ultimo_preco)}</span>` : ''}
               ${autonomia > 0 ? `<span class="badge">~${autonomia} dias</span>` : ''}
               ${validadeBadge}
             </div>
@@ -253,7 +347,6 @@ window.movimentar = async (itemId, tipo) => {
   const item = state.itens.find(i => i.id === itemId);
   if (!item) return;
 
-  // Atualização otimista na tela (resposta imediata)
   item.estoque_atual = tipo === 'BAIXA' ? Math.max(0, Number(item.estoque_atual) - 1) : Number(item.estoque_atual) + 1;
   salvarCacheLocal();
   renderDespensa();
@@ -276,20 +369,22 @@ window.abrirModalItem = (id = null) => {
   selectCat.innerHTML = state.categorias.map(c => `<option value="${c}">${c}</option>`).join('');
 
   const item = id ? state.itens.find(i => i.id === id) : null;
-  document.getElementById('modalItemTitulo').textContent = item ? 'Editar Item' : 'Novo Item';
+  document.getElementById('modalItemTitulo').textContent = item ? '⭐ Editar Item' : '⭐ Novo Item';
   document.getElementById('itemId').value = item ? item.id : '';
   document.getElementById('itemNome').value = item ? item.nome : '';
   document.getElementById('itemCategoria').value = item ? item.categoria : (state.categorias[0] || 'Alimentos');
   document.getElementById('itemUnidade').value = item ? item.unidade_uso : 'Unidade';
-  document.getElementById('itemAtual').value = item ? item.estoque_atual : 0;
-  document.getElementById('itemMin').value = item ? item.estoque_min : 1;
-  document.getElementById('itemMax').value = item ? item.estoque_max : 4;
-  document.getElementById('itemFardo').value = item ? item.qtd_fardo : 1;
-  document.getElementById('itemPreco').value = item ? item.ultimo_preco : 0;
+  document.getElementById('itemPreco').value = formatarCentavosParaTexto(item ? item.ultimo_preco : 0);
   document.getElementById('itemMarca').value = item ? item.ultima_marca : '';
   document.getElementById('itemValidade').value = item ? (item.validade_proxima || '') : '';
 
   document.getElementById('modalItem').showModal();
+
+  // Inicializa os 4 seletores rotativos estilo relógio Apple
+  criarWheelPicker('wheelAtual', 'atual', item ? item.estoque_atual : 0, 60, 0);
+  criarWheelPicker('wheelMin', 'min', item ? item.estoque_min : 1, 30, 0);
+  criarWheelPicker('wheelMax', 'max', item ? item.estoque_max : 4, 60, 1);
+  criarWheelPicker('wheelFardo', 'fardo', item ? item.qtd_fardo : 1, 30, 1);
 };
 
 async function salvarFormItem(e) {
@@ -298,12 +393,12 @@ async function salvarFormItem(e) {
     id: document.getElementById('itemId').value || '',
     nome: document.getElementById('itemNome').value.trim(),
     categoria: document.getElementById('itemCategoria').value,
-    unidade_uso: document.getElementById('itemUnidade').value.trim(),
-    estoque_atual: Number(document.getElementById('itemAtual').value),
-    estoque_min: Number(document.getElementById('itemMin').value),
-    estoque_max: Number(document.getElementById('itemMax').value),
-    qtd_fardo: Number(document.getElementById('itemFardo').value || 1),
-    ultimo_preco: Number(document.getElementById('itemPreco').value || 0),
+    unidade_uso: document.getElementById('itemUnidade').value,
+    estoque_atual: wheelValues.atual,
+    estoque_min: wheelValues.min,
+    estoque_max: wheelValues.max,
+    qtd_fardo: wheelValues.fardo,
+    ultimo_preco: parseTextoMoeda(document.getElementById('itemPreco').value),
     ultima_marca: document.getElementById('itemMarca').value.trim(),
     validade_proxima: document.getElementById('itemValidade').value || ''
   };
@@ -323,9 +418,7 @@ function gerarListaAutomatica(modo) {
     const atual = Number(it.estoque_atual || 0);
     const min = Number(it.estoque_min || 0);
     const autonomia = Number(it.autonomia_dias || 0);
-    if (modo === 'semana') {
-      return atual <= min || (autonomia > 0 && autonomia <= 7);
-    }
+    if (modo === 'semana') return atual <= min || (autonomia > 0 && autonomia <= 7);
     return atual <= min;
   });
 
@@ -338,8 +431,7 @@ function gerarListaAutomatica(modo) {
   state.listaAtiva.data_prevista = new Date().toISOString().slice(0, 10);
 
   selecionados.forEach(it => {
-    const jaExiste = state.listaAtiva.itens.some(x => x.item_id === it.id);
-    if (!jaExiste) {
+    if (!state.listaAtiva.itens.some(x => x.item_id === it.id)) {
       const qtd = Math.max(1, Number(it.estoque_max || 2) - Number(it.estoque_atual || 0));
       state.listaAtiva.itens.push({
         item_id: it.id,
@@ -381,7 +473,7 @@ function renderListaCompras() {
   let totalEst = 0;
 
   if (state.listaAtiva.itens.length === 0) {
-    container.innerHTML = '<p class="hint" style="text-align:center;padding:20px;">Lista vazia. Use "Recompletar" ou adicione um item avulso.</p>';
+    container.innerHTML = '<div class="card"><p class="hint" style="text-align:center;margin:10px 0;">Lista vazia. Use "Recompletar" ou adicione um item avulso.</p></div>';
   } else {
     container.innerHTML = state.listaAtiva.itens.map((entry, idx) => {
       const ref = state.itens.find(i => i.id === entry.item_id);
@@ -394,7 +486,7 @@ function renderListaCompras() {
           <div class="card-top">
             <div>
               <div class="card-title">${nome}</div>
-              <div class="card-meta">Est.: R$ ${entry.preco_estimado.toFixed(2)} • Subtotal: R$ ${sub.toFixed(2)}</div>
+              <div class="card-meta">Est.: R$ ${formatarCentavosParaTexto(entry.preco_estimado)} • Sub: R$ ${formatarCentavosParaTexto(sub)}</div>
             </div>
             <div class="card-controls">
               <button class="btn-secondary btn-step" onclick="alterarQtdLista(${idx}, -1)">−</button>
@@ -453,7 +545,7 @@ function renderModoMercado() {
   let totalCar = 0;
 
   if (state.listaAtiva.itens.length === 0) {
-    container.innerHTML = '<p class="hint" style="text-align:center;padding:20px;">Gere ou adicione itens na lista para usar o Modo Mercado.</p>';
+    container.innerHTML = '<div class="card"><p class="hint" style="text-align:center;margin:10px 0;">Gere ou adicione itens na lista para usar o Modo Mercado.</p></div>';
   } else {
     container.innerHTML = state.listaAtiva.itens.map((entry, idx) => {
       const ref = state.itens.find(i => i.id === entry.item_id);
@@ -464,27 +556,51 @@ function renderModoMercado() {
       return `
         <div class="card ${entry.no_carrinho ? 'no-carrinho' : ''}">
           <div class="card-top">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
-              <input type="checkbox" ${entry.no_carrinho ? 'checked' : ''} onchange="toggleCarrinho(${idx}, this.checked)" style="width:20px;height:20px;" />
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;">
+              <input type="checkbox" ${entry.no_carrinho ? 'checked' : ''} onchange="toggleCarrinho(${idx}, this.checked)" style="width:22px;height:22px;" />
               <div>
                 <div class="card-title">${nome}</div>
-                <div class="card-meta">Último: R$ ${entry.preco_estimado.toFixed(2)}</div>
+                <div class="card-meta">Último: R$ ${formatarCentavosParaTexto(entry.preco_estimado)}</div>
               </div>
             </label>
             ${entry.item_id ? `<button class="btn-secondary btn-step" onclick="abrirHistorico('${entry.item_id}')">📈</button>` : ''}
           </div>
           <div class="market-inputs">
-            <input type="number" value="${entry.qtd_comprada}" min="1" onchange="updMercado(${idx}, 'qtd_comprada', this.value)" title="Qtd" />
-            <input type="number" step="0.01" value="${entry.preco_real}" onchange="updMercado(${idx}, 'preco_real', this.value)" placeholder="Preço R$" />
-            <input type="text" value="${entry.marca || ''}" onchange="updMercado(${idx}, 'marca', this.value)" placeholder="Marca" />
+            <div class="market-row">
+              <button class="btn-secondary btn-step" onclick="updQtdMercado(${idx}, -1)">−</button>
+              <span class="qtd-pill">${entry.qtd_comprada}</span>
+              <button class="btn-secondary btn-step" onclick="updQtdMercado(${idx}, 1)">+</button>
+              <div class="money-wrap" style="flex:1;">
+                <span>R$</span>
+                <input type="text" inputmode="numeric" id="mPreco${idx}" value="${formatarCentavosParaTexto(entry.preco_real)}" />
+              </div>
+            </div>
+            <input type="text" value="${entry.marca || ''}" onchange="updMercado(${idx}, 'marca', this.value)" placeholder="Marca comprada..." />
           </div>
         </div>
       `;
     }).join('');
+
+    // Aplica máscara de banco em cada campo de preço do mercado
+    state.listaAtiva.itens.forEach((_, idx) => {
+      aplicarMascaraBanco(document.getElementById('mPreco' + idx), (val) => {
+        state.listaAtiva.itens[idx].preco_real = val;
+        salvarListaLocal();
+        atualizarTotaisMercado();
+      });
+    });
   }
 
   document.getElementById('totalCarrinho').textContent = formatarBRL(totalCar);
   document.getElementById('totalEstimadoMercado').textContent = formatarBRL(totalEst);
+}
+
+function atualizarTotaisMercado() {
+  let totalCar = 0;
+  state.listaAtiva.itens.forEach(entry => {
+    if (entry.no_carrinho) totalCar += entry.qtd_comprada * entry.preco_real;
+  });
+  document.getElementById('totalCarrinho').textContent = formatarBRL(totalCar);
 }
 
 window.toggleCarrinho = (idx, checked) => {
@@ -493,10 +609,15 @@ window.toggleCarrinho = (idx, checked) => {
   renderModoMercado();
 };
 
-window.updMercado = (idx, campo, valor) => {
-  state.listaAtiva.itens[idx][campo] = campo === 'marca' ? valor : Number(valor || 0);
+window.updQtdMercado = (idx, delta) => {
+  state.listaAtiva.itens[idx].qtd_comprada = Math.max(1, state.listaAtiva.itens[idx].qtd_comprada + delta);
   salvarListaLocal();
   renderModoMercado();
+};
+
+window.updMercado = (idx, campo, valor) => {
+  state.listaAtiva.itens[idx][campo] = valor;
+  salvarListaLocal();
 };
 
 async function finalizarCompraMercado() {
@@ -505,10 +626,10 @@ async function finalizarCompraMercado() {
     alert('Marque pelo menos um item no carrinho antes de finalizar.');
     return;
   }
+  const local = document.getElementById('selectLocalMercado').value;
   if (!confirm(`Finalizar compra com ${comprados.length} item(ns) e dar entrada no estoque?`)) return;
 
   try {
-    const local = document.getElementById('inputLocalMercado').value.trim();
     await postGAS({
       action: 'finalizarCompra',
       lista_id: state.listaAtiva.lista_id || ('LST_' + Date.now()),
@@ -516,7 +637,6 @@ async function finalizarCompraMercado() {
       usuario: getUsuario(),
       itensComprados: comprados
     });
-    // Limpa lista ativa e recarrega tudo da nuvem
     state.listaAtiva = { lista_id: '', data_prevista: new Date().toISOString().slice(0, 10), itens: [] };
     salvarListaLocal();
     await sincronizarComNuvem();
@@ -533,7 +653,7 @@ window.abrirHistorico = (itemId) => {
     .filter(h => String(h.item_id) === String(itemId))
     .sort((a, b) => String(a.data_iso).localeCompare(String(b.data_iso)));
 
-  document.getElementById('tituloHistorico').textContent = `Preços: ${item ? item.nome : ''}`;
+  document.getElementById('tituloHistorico').textContent = `📈 Preços: ${item ? item.nome : ''}`;
   const chartBox = document.getElementById('graficoPrecos');
   const ul = document.getElementById('listaHistoricoPrecos');
 
@@ -541,7 +661,6 @@ window.abrirHistorico = (itemId) => {
     chartBox.innerHTML = '<p class="hint" style="text-align:center;padding:30px 0;">Sem histórico de compras ainda.</p>';
     ul.innerHTML = '';
   } else {
-    // Desenha curva simples em SVG
     const precos = hist.map(h => Number(h.preco_unitario));
     const min = Math.min(...precos) * 0.95;
     const max = Math.max(...precos) * 1.05 || 1;
@@ -554,10 +673,10 @@ window.abrirHistorico = (itemId) => {
 
     chartBox.innerHTML = `
       <svg viewBox="0 0 ${w} ${h}" width="100%" height="90">
-        <polyline fill="none" stroke="#38bdf8" stroke-width="3" points="${pts}" />
+        <polyline fill="none" stroke="#e52521" stroke-width="3" points="${pts}" />
         ${precos.map((p, i) => {
           const [x, y] = pts.split(' ')[i].split(',');
-          return `<circle cx="${x}" cy="${y}" r="4" fill="#22c55e" />`;
+          return `<circle cx="${x}" cy="${y}" r="4.5" fill="#00a800" stroke="#24190e" stroke-width="1.5" />`;
         }).join('')}
       </svg>
     `;
@@ -584,10 +703,13 @@ function renderCalculadoraPapel() {
   container.innerHTML = [1, 2, 3].map(n => `
     <div class="papel-card" id="papelCard${n}">
       <strong>Opção ${n}</strong>
-      <div class="row-3" style="margin-top:6px;">
-        <input type="number" step="0.01" id="pPreco${n}" placeholder="Preço R$" oninput="calcularPapel()" />
-        <input type="number" id="pRolos${n}" placeholder="Rolos" oninput="calcularPapel()" />
-        <input type="number" id="pMetros${n}" placeholder="Metros" oninput="calcularPapel()" />
+      <div class="money-wrap">
+        <span>R$</span>
+        <input type="text" inputmode="numeric" id="pPreco${n}" value="0,00" placeholder="Preço" />
+      </div>
+      <div class="market-row">
+        <input type="number" id="pRolos${n}" placeholder="Qtd Rolos" oninput="calcularPapel()" />
+        <input type="number" id="pMetros${n}" placeholder="Metros/rolo" oninput="calcularPapel()" />
       </div>
       <div class="quick-m">
         <button type="button" onclick="setMetros(${n}, 20)">20m</button>
@@ -597,6 +719,10 @@ function renderCalculadoraPapel() {
       <div class="papel-res" id="pRes${n}">Preencha os campos</div>
     </div>
   `).join('');
+
+  [1, 2, 3].forEach(n => {
+    aplicarMascaraBanco(document.getElementById('pPreco' + n), calcularPapel);
+  });
 }
 
 window.setMetros = (n, m) => {
@@ -610,7 +736,7 @@ window.calcularPapel = () => {
 
   [1, 2, 3].forEach(n => {
     document.getElementById('papelCard' + n).classList.remove('vencedor');
-    const preco = Number(document.getElementById('pPreco' + n).value);
+    const preco = parseTextoMoeda(document.getElementById('pPreco' + n).value);
     const rolos = Number(document.getElementById('pRolos' + n).value);
     const metros = Number(document.getElementById('pMetros' + n).value);
     const resEl = document.getElementById('pRes' + n);
