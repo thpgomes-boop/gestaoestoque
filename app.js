@@ -16,6 +16,12 @@ function num(v, padrao) {
   return (v === '' || v === null || v === undefined || isNaN(n)) ? padrao : n;
 }
 
+function autonomiaOuNull(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;',
@@ -148,12 +154,10 @@ async function descarregarFila() {
         salvarOutbox(fila);
       } catch (err) {
         if (err.isBusiness) {
-          // Erro definitivo de negócio: remove da fila para não travar as próximas
           fila.shift();
           salvarOutbox(fila);
           alert('Uma movimentação pendente falhou e foi descartada: ' + err.message);
         } else {
-          // Erro de rede ou servidor ocupado (lock): mantém na fila para tentar depois
           setStatus(`Offline • ${fila.length} pendência(s)`);
           break;
         }
@@ -236,7 +240,6 @@ function criarWheelPicker(hostId, keyName, valorInicial = 0, maxVal = 50, minVal
 
 // ======================== COMUNICAÇÃO GAS ========================
 async function sincronizarComNuvem() {
-  // Primeiro tenta enviar qualquer pendência offline
   await descarregarFila();
   const pendentes = lerOutbox();
   if (pendentes.length > 0) {
@@ -258,7 +261,6 @@ async function sincronizarComNuvem() {
 
     const todasListas = json.listas || [];
 
-    // 1. Se a lista local já consta como FINALIZADA na nuvem, descarta e avisa
     if (state.listaAtiva.lista_id) {
       const linhasLocaisNaNuvem = todasListas.filter(l => String(l.lista_id) === String(state.listaAtiva.lista_id));
       if (linhasLocaisNaNuvem.length > 0 && linhasLocaisNaNuvem.every(l => l.status === 'FINALIZADA')) {
@@ -268,7 +270,6 @@ async function sincronizarComNuvem() {
       }
     }
 
-    // 2. Considera apenas a lista ABERTA mais recente da nuvem
     const todasAbertas = todasListas.filter(l => l.status === 'ABERTA');
     if (todasAbertas.length > 0) {
       const idMaisRecente = todasAbertas[todasAbertas.length - 1].lista_id;
@@ -346,13 +347,11 @@ function bindEventos() {
   document.getElementById('btnNovoItem').addEventListener('click', () => abrirModalItem());
   document.getElementById('formItem').addEventListener('submit', salvarFormItem);
 
-  // Delegação: Categorias
   document.getElementById('listaCategorias').addEventListener('click', e => {
     const btn = e.target.closest('[data-cat]');
     if (btn) filtrarCategoria(btn.dataset.cat);
   });
 
-  // Delegação: Despensa
   document.getElementById('gridDespensa').addEventListener('click', e => {
     const el = e.target.closest('[data-action]');
     if (!el) return;
@@ -363,7 +362,6 @@ function bindEventos() {
     else if (action === 'mov') movimentar(id, el.dataset.tipo);
   });
 
-  // Delegação: Lista de Compras
   document.getElementById('listaComprasContainer').addEventListener('click', e => {
     const el = e.target.closest('[data-action]');
     if (!el) return;
@@ -372,7 +370,6 @@ function bindEventos() {
     else if (el.dataset.action === 'rem-lista') removerDaLista(idx);
   });
 
-  // Delegação: Modo Mercado (cliques e alterações)
   const mercadoEl = document.getElementById('mercadoContainer');
   mercadoEl.addEventListener('click', e => {
     const el = e.target.closest('[data-action]');
@@ -483,7 +480,7 @@ function renderDespensa() {
     const atual = num(it.estoque_atual, 0);
     const min = num(it.estoque_min, 0);
     const classe = atual < min ? 'alerta-baixo' : (atual === min ? 'alerta-medio' : 'alerta-ok');
-    const autonomia = num(it.autonomia_dias, 0);
+    const autonomia = autonomiaOuNull(it.autonomia_dias);
     const validadeBadge = getBadgeValidade(it.validade_proxima);
 
     return `
@@ -495,7 +492,7 @@ function renderDespensa() {
             <div class="badges">
               <span class="badge">Mín: ${min} / Alvo: ${num(it.estoque_max, 0)}</span>
               ${num(it.ultimo_preco, 0) > 0 ? `<span class="badge">R$ ${formatarCentavosParaTexto(it.ultimo_preco)}</span>` : ''}
-              ${autonomia > 0 ? `<span class="badge">~${autonomia} dias</span>` : ''}
+              ${autonomia !== null ? `<span class="badge">~${autonomia} dias</span>` : ''}
               ${validadeBadge}
             </div>
           </div>
@@ -525,7 +522,10 @@ function movimentar(itemId, tipo) {
   const item = state.itens.find(i => i.id === itemId);
   if (!item) return;
 
-  item.estoque_atual = tipo === 'BAIXA' ? Math.max(0, num(item.estoque_atual, 0) - 1) : num(item.estoque_atual, 0) + 1;
+  const atual = num(item.estoque_atual, 0);
+  if (tipo === 'BAIXA' && atual <= 0) return;
+
+  item.estoque_atual = tipo === 'BAIXA' ? Math.max(0, atual - 1) : atual + 1;
   salvarCacheLocal();
   renderDespensa();
 
@@ -590,8 +590,8 @@ function gerarListaAutomatica(modo) {
   const selecionados = state.itens.filter(it => {
     const atual = num(it.estoque_atual, 0);
     const min = num(it.estoque_min, 0);
-    const autonomia = num(it.autonomia_dias, 0);
-    if (modo === 'semana') return atual < min || (autonomia > 0 && autonomia <= 7);
+    const autonomia = autonomiaOuNull(it.autonomia_dias);
+    if (modo === 'semana') return atual < min || (autonomia !== null && autonomia <= 7);
     return atual < min;
   });
 
