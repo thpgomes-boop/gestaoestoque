@@ -1,4 +1,4 @@
-const API_URL = 'https://script.google.com/macros/library/d/11AA1i90ZKNMljLcC6O0ewNyKGJveUzrljX9LhsQ2B_4lvUVzugcuIzVG/11';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwXoIcmCCQl13ynmQMvLPP56ldYDNC5sx2hgcgoVIGF1f_CnI74PI82fQAi_7yLMseNag/exec';
 const API_TOKEN = '99831900';
 
 const CACHE_KEY = 'estoque_casa_cache_v13';
