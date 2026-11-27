@@ -3,41 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0f4c81" />
+  <meta name="theme-color" content="#0f766e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <title>Estoque de Casa</title>
   <link rel="stylesheet" href="style.css?v=13" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand-block">
-      <h1>Estoque de Casa</h1>
-      <span id="statusSync" class="status-badge">Online • Atualizado</span>
+  <header class="app-header">
+    <div class="header-top">
+      <div>
+        <h1>Estoque de Casa</h1>
+        <div class="status-linha">
+          <span id="statusDot" class="status-dot online"></span>
+          <span id="statusSync">Online • Sincronizado</span>
+        </div>
+      </div>
+      <div class="header-acoes">
+        <select id="selectUsuario" aria-label="Usuário">
+          <option value="Thiago">Thiago</option>
+          <option value="Bárbara">Bárbara</option>
+          <option value="Casa">Casa</option>
+        </select>
+        <button id="btnSync" class="btn-icon" title="Sincronizar agora">↻</button>
+      </div>
     </div>
-    <div class="header-controls">
-      <select id="selectUsuario" aria-label="Usuário">
-        <option value="Thiago">Thiago</option>
-        <option value="Bárbara">Bárbara</option>
-        <option value="Casa">Casa</option>
-      </select>
-      <button id="btnAjuda" class="icon-btn" title="Guia rápido">?</button>
-      <button id="btnSync" class="icon-btn" title="Sincronizar com planilha">↻</button>
+
+    <div class="fin-strip" id="finStrip">
+      <div class="fin-pill"><span>Mês (Est.)</span><strong id="finEstimado">R$ 0,00</strong></div>
+      <div class="fin-pill"><span>Realizado</span><strong id="finRealizado">R$ 0,00</strong></div>
+      <div class="fin-pill"><span>Previsto</span><strong id="finPrevisto">R$ 0,00</strong></div>
     </div>
   </header>
-
-  <section class="finance-strip" aria-label="Resumo financeiro">
-    <div class="fin-card">
-      <span class="fin-label">Estimativa do mês</span>
-      <strong id="finEstimativa" class="fin-value">R$ 0,00</strong>
-    </div>
-    <div class="fin-card">
-      <span class="fin-label">Realizado</span>
-      <strong id="finRealizado" class="fin-value fin-ok">R$ 0,00</strong>
-    </div>
-    <div class="fin-card">
-      <span class="fin-label">Previsto</span>
-      <strong id="finPrevisto" class="fin-value fin-warn">R$ 0,00</strong>
-    </div>
-  </section>
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="tab-despensa">📦 Despensa</button>
@@ -46,67 +44,67 @@
   </nav>
 
   <main class="container">
-    <!-- ABA 1: DESPENSA -->
+    <!-- ABA DESPENSA -->
     <section id="tab-despensa" class="tab-panel active">
       <div class="toolbar">
         <input type="search" id="buscaItem" placeholder="Buscar produto..." />
         <button id="btnFiltroVencendo" class="btn-chip" title="Vencendo em até 7 dias">⏰ 7d</button>
-        <button id="btnFiltroPausados" class="btn-chip" title="Mostrar itens pausados/desativados">⏸️</button>
+        <button id="btnFiltroPausados" class="btn-chip" title="Mostrar itens pausados/inativos">⏸️ Pausados</button>
         <button id="btnNovoItem" class="btn-primary">+ Item</button>
       </div>
-
-      <div id="filtrosCategoria" class="chips-row"></div>
+      <div id="filtroCategorias" class="cat-bar"></div>
       <div id="gridDespensa" class="grid-cards"></div>
     </section>
 
-    <!-- ABA 2: LISTA DE COMPRAS -->
+    <!-- ABA LISTA -->
     <section id="tab-lista" class="tab-panel">
-      <div class="card action-panel">
-        <div class="action-buttons-row">
-          <button id="btnGerarMinimo" class="btn-primary">⚡ Recompletar</button>
-          <button id="btnGerarSemana" class="btn-secondary">📅 Semana</button>
-          <button id="btnAbrirIA" class="btn-accent">✨ Encarte / Cupom</button>
+      <div class="card lista-controles">
+        <div class="lista-topo">
+          <div>
+            <label for="dataLista" class="lbl-mini">Data prevista</label>
+            <input type="date" id="dataLista" />
+          </div>
+          <div class="lista-auto-btns">
+            <button id="btnGerarRecompletar" class="btn-secondary">⚡ Recompletar</button>
+            <button id="btnGerarSemana" class="btn-secondary">📅 Semana</button>
+          </div>
         </div>
         <div class="add-avulso-row">
-          <input type="text" id="inputAvulso" placeholder="Adicionar item avulso..." />
-          <button id="btnAddAvulso" class="btn-secondary">+ Add</button>
+          <input type="text" id="inputAvulso" placeholder="Adicionar item avulso ou da despensa..." />
+          <input type="number" id="qtdAvulso" min="1" value="1" class="input-qtd-mini" />
+          <button id="btnAddAvulso" class="btn-primary">Adicionar</button>
+        </div>
+        <div class="lista-acoes-rodape">
+          <button id="btnSalvarLista" class="btn-secondary">💾 Salvar lista</button>
+          <button id="btnIrMercado" class="btn-primary">Ir para Mercado →</button>
         </div>
       </div>
-
-      <div id="listaAtualContainer"></div>
-
-      <div class="card lista-footer">
-        <div class="totais-box">
-          <span>Estimativa da lista: <strong id="totalListaEstimado">R$ 0,00</strong></span>
-        </div>
-        <div class="footer-actions">
-          <button id="btnSalvarLista" class="btn-secondary">💾 Salvar Lista</button>
-          <button id="btnIrMercado" class="btn-primary">🛒 Ir ao Mercado</button>
-        </div>
-      </div>
+      <div id="listaContainer" class="stack-cards"></div>
     </section>
 
-    <!-- ABA 3: MODO MERCADO -->
+    <!-- ABA MODO MERCADO -->
     <section id="tab-mercado" class="tab-panel">
-      <div class="card mercado-top">
-        <label for="selectLocalMercado" class="field-label">Mercado</label>
-        <div class="mercado-select-row">
-          <select id="selectLocalMercado"></select>
-          <button id="btnNovoMercado" class="btn-secondary">+ Mercado</button>
+      <div class="card mercado-topo">
+        <div class="mercado-selects">
+          <select id="selectLocalMercado">
+            <option value="">Mercado / Local...</option>
+          </select>
+          <button id="btnNovoMercado" class="btn-secondary">+ Local</button>
+          <button id="btnAbrirIA" class="btn-secondary">✨ Encarte/Cupom</button>
         </div>
       </div>
 
-      <div id="mercadoContainer" class="mercado-list"></div>
+      <div id="mercadoContainer" class="stack-cards mercado-lista-pad"></div>
 
-      <div class="mercado-sticky-bar">
-        <div class="sticky-totals">
+      <div class="mercado-barra-fixa">
+        <div class="totais-mercado">
           <div>
             <small>No carrinho</small>
             <strong id="totalCarrinho">R$ 0,00</strong>
           </div>
           <div class="text-right">
-            <small>Estimado</small>
-            <span id="totalEstimadoMercado">R$ 0,00</span>
+            <small>Estimado lista</small>
+            <strong id="totalEstimadoMercado">R$ 0,00</strong>
           </div>
         </div>
         <button id="btnFinalizarCompra" class="btn-success">✓ Finalizar Compra</button>
@@ -114,111 +112,105 @@
     </section>
   </main>
 
-  <!-- MODAL: CADASTRO / EDIÇÃO DE ITEM -->
+  <!-- MODAL CADASTRO / EDIÇÃO DE ITEM -->
   <div id="modalItem" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2 id="tituloModalItem">Novo Produto</h2>
-        <button class="btn-close" data-close="modalItem">✕</button>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="modalItemTitulo">Novo item</h2>
+        <button type="button" class="btn-fechar" data-fechar="modalItem">✕</button>
       </div>
-      <form id="formItem">
+      <form id="formItem" class="form-grid">
         <input type="hidden" id="itemId" />
-        <label>Nome do produto
+        <label>Nome do produto*
           <input type="text" id="itemNome" required placeholder="Ex.: Arroz 5kg" />
         </label>
-        <div class="two-cols">
+        <div class="form-row-2">
           <label>Categoria
             <select id="itemCategoria"></select>
           </label>
           <label>Unidade de consumo
-            <input type="text" id="itemUnidade" value="Unidade" required />
+            <input type="text" id="itemUnidade" value="Unidade" placeholder="Ex.: Unidade, Pacote, Caixa" />
           </label>
         </div>
-        <div class="three-cols">
-          <label>Qtd / Fardo
-            <input type="number" id="itemQtdFardo" min="1" value="1" />
-          </label>
+        <div class="form-row-3">
           <label>Estoque atual
-            <input type="number" id="itemEstoqueAtual" min="0" value="0" />
+            <input type="number" id="itemAtual" min="0" step="any" value="0" />
           </label>
           <label>Mínimo (alerta)
-            <input type="number" id="itemEstoqueMin" min="0" value="1" />
+            <input type="number" id="itemMin" min="0" step="any" value="1" />
+          </label>
+          <label>Alvo / Máximo
+            <input type="number" id="itemMax" min="0" step="any" value="2" />
           </label>
         </div>
-        <div class="two-cols">
-          <label>Ideal / Máximo
-            <input type="number" id="itemEstoqueMax" min="1" value="2" />
+        <div class="form-row-2">
+          <label>Qtd por fardo/caixa
+            <input type="number" id="itemFardo" min="1" step="any" value="1" />
           </label>
           <label>Último preço (R$)
-            <input type="text" inputmode="numeric" id="itemUltimoPreco" value="0,00" />
+            <input type="text" inputmode="numeric" id="itemPreco" value="0,00" />
           </label>
         </div>
-        <div class="two-cols">
-          <label>Marca
-            <input type="text" id="itemMarca" placeholder="Opcional" />
+        <div class="form-row-2">
+          <label>Marca de referência
+            <input type="text" id="itemMarca" placeholder="Ex.: Tio João" />
           </label>
           <label>Validade próxima
             <input type="date" id="itemValidade" />
           </label>
         </div>
-        <label class="checkbox-inline">
+        <label class="check-row">
           <input type="checkbox" id="itemAtivo" checked />
-          <span>Item ativo nas listas automáticas</span>
+          <span>Item ativo na lista automática (desmarque para pausar / sob demanda)</span>
         </label>
-        <div class="modal-actions">
-          <button type="button" class="btn-secondary" data-close="modalItem">Cancelar</button>
-          <button type="submit" class="btn-primary">Salvar</button>
+        <div class="form-row-2">
+          <label class="btn-secondary file-btn">
+            📷 Foto do produto
+            <input type="file" id="inputFotoItem" accept="image/*" capture="environment" hidden />
+          </label>
+          <span id="nomeFotoSelecionada" class="hint">Nenhuma foto nova</span>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-fechar="modalItem">Cancelar</button>
+          <button type="submit" class="btn-primary">Salvar item</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL: HISTÓRICO DE PREÇOS -->
+  <!-- MODAL HISTÓRICO DE PREÇOS -->
   <div id="modalHistorico" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2 id="tituloHistorico">Histórico de Preços</h2>
-        <button class="btn-close" data-close="modalHistorico">✕</button>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="tituloHistorico">Histórico de preços</h2>
+        <button type="button" class="btn-fechar" data-fechar="modalHistorico">✕</button>
       </div>
       <div id="conteudoHistorico"></div>
     </div>
   </div>
 
-  <!-- MODAL: IA (ENCARTE / CUPOM) -->
+  <!-- MODAL LEITOR IA (ENCARTE / CUPOM) -->
   <div id="modalIA" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>Ler Encarte ou Cupom com IA</h2>
-        <button class="btn-close" data-close="modalIA">✕</button>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>✨ Ler Encarte ou Cupom com IA</h2>
+        <button type="button" class="btn-fechar" data-fechar="modalIA">✕</button>
       </div>
-      <div class="ia-mode-row">
-        <button type="button" id="modoEncarte" class="btn-chip active">📰 Encarte / Oferta</button>
-        <button type="button" id="modoCupom" class="btn-chip">🧾 Cupom Fiscal</button>
+      <div class="form-grid">
+        <div class="form-row-2">
+          <button type="button" id="modoIAEncarte" class="btn-primary">🏷️ Encarte / Oferta</button>
+          <button type="button" id="modoIACupom" class="btn-secondary">🧾 Cupom Fiscal</button>
+        </div>
+        <label>Cole o texto ou observação
+          <textarea id="textoIA" rows="3" placeholder="Ex.: Arroz 5kg R$ 22,90 - Fujiyama"></textarea>
+        </label>
+        <label class="btn-secondary file-btn">
+          📸 Selecionar / tirar foto
+          <input type="file" id="fotoIA" accept="image/*" capture="environment" hidden />
+        </label>
+        <button type="button" id="btnAnalisarIA" class="btn-primary">Analisar agora</button>
+        <div id="resultadoIA" class="stack-cards"></div>
       </div>
-      <label>Foto do encarte ou cupom
-        <input type="file" id="fotoIA" accept="image/*" capture="environment" />
-      </label>
-      <label>Ou cole o texto / mensagem de oferta
-        <textarea id="textoIA" rows="4" placeholder="Cole aqui as ofertas ou itens do cupom..."></textarea>
-      </label>
-      <button type="button" id="btnExecutarIA" class="btn-primary full-width">Analisar com IA</button>
-      <div id="resultadoIA"></div>
-    </div>
-  </div>
-
-  <!-- MODAL: GUIA RÁPIDO -->
-  <div id="modalAjuda" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>Guia Rápido</h2>
-        <button class="btn-close" data-close="modalAjuda">✕</button>
-      </div>
-      <ul class="help-list">
-        <li><strong>− / + na Despensa:</strong> Dá baixa (com botão de desfazer logo em seguida) ou soma estoque.</li>
-        <li><strong>0 (Acabou):</strong> Joga 1 unidade direto na Lista de Compras. Ideal para itens de ciclo longo com <em>Mínimo = 0</em> (ex.: ração de 10 kg, temperos).</li>
-        <li><strong>⏸️ / ▶️ (Pausar):</strong> Esconde itens que você não consome hoje das listas automáticas, sem apagar o cadastro.</li>
-        <li><strong>Modo Mercado (0/6 até N/6):</strong> Deixe em <strong>0</strong> o que não levou, some além da meta se houver promoção e, no <strong>Hortifrúti</strong>, digite o <strong>valor total</strong> da balança para calcular o unitário ao finalizar.</li>
-      </ul>
     </div>
   </div>
 

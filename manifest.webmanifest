@@ -1,0 +1,9 @@
+{
+  "name": "Estoque de Casa",
+  "short_name": "Estoque Casa",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0f766e",
+  "description": "Gestão de despensa, listas de compras e modo mercado com histórico de preços."
+}
